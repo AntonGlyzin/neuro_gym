@@ -28,9 +28,16 @@ class AlgorithmEvaluate:
     
     LOW = -1.0
     UP = 1.0
-    ETA = 15
+    ETA = 20
 
     def __init__(self, model: NetworkAgent, environ: gym.Env, individ: Environs):
+        """
+        
+        Args:
+            model (NetworkAgent): Нейронная модель.
+            environ (gym.Env): Сцена.
+            individ (Environs): Окружение и настройки.
+        """        
         self._individ = individ
         self._model = model
         self._environ = environ

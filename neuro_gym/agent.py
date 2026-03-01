@@ -13,6 +13,11 @@ class NetworkAgent(nn.Module):
     """ Нейронная сеть агента. """
     
     def __init__(self, environ: Environs):
+        """
+        
+        Args:
+            environ (Environs): Окружение.
+        """        
         super(NetworkAgent, self).__init__()
         self._environ = environ
         self._neuro_config = environ.neuro_config
@@ -32,7 +37,11 @@ class NetworkAgent(nn.Module):
     
     @property
     def count_weights(self) -> int:
-        """ Общее количество весов в сетию. """
+        """Общее количество весов в сетию.
+
+        Returns:
+            int: Количество весов.
+        """        
         return sum(p.numel() for p in self.parameters())
     
     def _init_weights(self):
@@ -45,7 +54,16 @@ class NetworkAgent(nn.Module):
     def predict(self, x: Union[np.ndarray, list, torch.Tensor], 
                 confidence: bool = False,
                 ensure_batch: bool = False) -> Union[Any, Tuple]:
-        """ Предсказание действия. """
+        """Предсказание действия.
+
+        Args:
+            x (Union[np.ndarray, list, torch.Tensor]): Вход нейронной сети.
+            confidence (bool, optional): Выдавать ли уверенность ответа.
+            ensure_batch (bool, optional): Пакетная ли обработка.
+
+        Returns:
+            Union[Any, Tuple]: Предсказание и уверенность.
+        """        
         tensor_x = self._prepare_input(x, ensure_batch)
         with torch.no_grad():
             outputs = self._network(tensor_x)
@@ -57,14 +75,25 @@ class NetworkAgent(nn.Module):
         return res, F.softmax(outputs, dim=-1).max()
     
     def get_weights_as_vector(self) -> np.ndarray:
-        """ Получение весов модели. """
+        """Получение весов модели.
+
+        Returns:
+            np.ndarray: Весовые коэфиценты.
+        """        
         weights_vector = []
         for _, param in self.named_parameters():
             weights_vector.extend(param.data.numpy().flatten())
         return np.array(weights_vector, dtype=np.float32)
     
     def set_weights_from_vector(self, chromosome: List[float]) -> None:
-        """ Установка весов из плоского вектора. """
+        """Установка весов из плоского вектора.
+
+        Args:
+            chromosome (List[float]): Весовые коэфиценты.
+
+        Raises:
+            ValueError: Количество весов не совпадает.
+        """        
         if len(chromosome) != self.count_weights:
             raise ValueError(f"Ожидается {self.count_weights} весов, получено {len(chromosome)}")
         start_idx = 0
@@ -89,7 +118,15 @@ class NetworkAgent(nn.Module):
     
     def _prepare_input(self, x: Union[np.ndarray, list, torch.Tensor], 
                     ensure_batch: bool = False) -> torch.Tensor:
-        """ Подготовка входных данных для нейросети. """
+        """Подготовка входных данных для нейросети.
+
+        Args:
+            x (Union[np.ndarray, list, torch.Tensor]): Входной вектор.
+            ensure_batch (bool, optional): Пакетная обработка.
+
+        Returns:
+            torch.Tensor: Обработанные данные.
+        """        
         if isinstance(x, torch.Tensor):
             tensor_x = x.float()
         elif isinstance(x, np.ndarray):
