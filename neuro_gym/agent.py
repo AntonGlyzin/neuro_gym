@@ -5,32 +5,32 @@ import numpy as np
 import torch.nn.functional as F
 from typing import Union, Tuple, List, Any
 
-from neuro_gym.environs import Environs
-from settings import ROOT_DIR
+from neuro_gym.environ import Environ
 
 
 class NetworkAgent(nn.Module):
     """ Нейронная сеть агента. """
     
-    def __init__(self, environ: Environs):
+    def __init__(self, environ: Environ):
         """
         
         Args:
-            environ (Environs): Окружение.
+            environ (Environ): Окружение.
         """        
         super(NetworkAgent, self).__init__()
+        self.age_gen = 0
+        self.number_model = 0
         self._environ = environ
-        self._neuro_config = environ.neuro_config
         hidden_size = self._hidden_size()
-        self._path_agent = ROOT_DIR / self._environ.id / 'Agent'
+        self._path_agent = self._environ.statistic_folder / 'agent'
         self._network = nn.Sequential(
-            nn.Linear(self._neuro_config.input_size, hidden_size),
+            nn.Linear(self._environ.number_input_neurons, hidden_size),
             nn.ReLU(),
             nn.Dropout(0.2),
             nn.Linear(hidden_size, hidden_size // 2),
             nn.ReLU(),
             nn.Dropout(0.2),
-            nn.Linear(hidden_size // 2, self._neuro_config.output_size)
+            nn.Linear(hidden_size // 2, self._environ.number_output_neurons)
         )
         self._init_weights()
         self.eval()
@@ -69,7 +69,7 @@ class NetworkAgent(nn.Module):
             outputs = self._network(tensor_x)
         if outputs.dim() == 2:
             outputs = tensor_x.squeeze()
-        res = self._neuro_config.update_vector(outputs)
+        res = self._environ.update_vector(outputs)
         if not confidence:
             return res
         return res, F.softmax(outputs, dim=-1).max()
@@ -108,12 +108,21 @@ class NetworkAgent(nn.Module):
     
     def save_modal(self):
         """ Сохранение модели в файл. """
-        torch.save(self.state_dict(), str(self._path_agent))
+        checkpoint = {
+            'model': self.state_dict(),
+            'age_gen': self.age_gen,
+            'number_model': self.number_model
+        }
+        torch.save(checkpoint, self._path_agent)
     
     def load_modal(self):
         """ Загрузить модель из файла. """
-        if self._path_agent.exists():
-            self.load_state_dict(torch.load(str(self._path_agent)))
+        if not self._path_agent.exists():
+            return None
+        checkpoint = torch.load(self._path_agent)
+        self.load_state_dict(checkpoint['model'])
+        self.age_gen = checkpoint['age_gen']
+        self.number_model = checkpoint['number_model']
         self.eval()
     
     def _prepare_input(self, x: Union[np.ndarray, list, torch.Tensor], 
@@ -141,6 +150,6 @@ class NetworkAgent(nn.Module):
     
     def _hidden_size(self) -> int:
         """ Размера скрытого слоя. """
-        size = self._neuro_config.complexity * self._neuro_config.input_size * 2
+        size = self._environ.complexity * self._environ.number_input_neurons * 2
         powers = [32, 64, 128, 256, 512]
         return min(powers, key=lambda x: abs(x - size))

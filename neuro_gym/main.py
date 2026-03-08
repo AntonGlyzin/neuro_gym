@@ -5,11 +5,11 @@ from pathlib import Path
 import gymnasium as gym
 from typing import List, Optional
 import matplotlib.pyplot as plt
-from neuro_gym.environs import Environs
+from neuro_gym.environ import Environs, Environ
 from neuro_gym.agent import NetworkAgent
-from neuro_gym.evaluate import AlgorithmEvaluate
+from neuro_gym.evaluate import GeneticEvolution
 
-from settings import ROOT_DIR
+from settings import ROOT_DIR, NUMBER_YEARS_ON_GRAPHIC, STATISTIC_DIR
 
 
 class NeuroGym(object):
@@ -17,13 +17,13 @@ class NeuroGym(object):
     
     def __init__(self):
         self._model: Optional[NetworkAgent] = None
-        self._env: Optional[Environs] = None
-        self._env_dir: Optional[Path] = None
+        self._env: Optional[Environ] = None
+        self.age_population = 0
         self.max_values = []
         self.mean_values = []
         self.min_values = []
         self.std_values = []
-        self.best_values = []
+        self.best_values: List[List[float]] = []
         self.best_individuals: List[List[list]] = []
     
     def start(self):
@@ -47,9 +47,11 @@ class NeuroGym(object):
                     1, Environs.len()
                 )
                 self._env = Environs.get(env_num-1)
-                self._env_dir = ROOT_DIR.joinpath(self._env.id)
-                if not self._env_dir.exists():
-                    self._env_dir.mkdir(parents=True, exist_ok=True)
+                self._env.statistic_folder = (
+                    self._env.statistic_folder or STATISTIC_DIR.joinpath(self._env.id)
+                )
+                if not self._env.statistic_folder.exists():
+                    self._env.statistic_folder.mkdir(parents=True, exist_ok=True)
                 self._load_statistics()
                 self._model = NetworkAgent(self._env)
                 self._model.load_modal()
@@ -89,21 +91,12 @@ class NeuroGym(object):
             print('Завершение работы.')
     
     def _my_model(self):
-        current = self._model.get_weights_as_vector()
-        num_ten = 0
-        num_ind = 0
-        for i, epoch in enumerate(self.best_individuals, 1):
-            for j, ind in enumerate(epoch, 1):
-                if np.array_equal(np.array(ind, dtype=np.float32), current):
-                    num_ind = j
-                    num_ten = i
-        if num_ten and num_ind:
-            year_ind = num_ten * 10
-            print(
-                f'Эта модель из {num_ten} десятилетия. '
-                f'Особь под номером {num_ind}. '
-                f'Возраст генов особи {year_ind} лет.'
-            )
+        num_ten = int(self._model.age_gen / 10)
+        print(
+            f'Эта модель из {num_ten } десятилетия. '
+            f'Особь под номером {self._model.number_model}. '
+            f'Возраст генов особи {self._model.age_gen} лет.'
+        )
     
     def _select_save_model(self):
         """ Сохранение выбранной модели. """
@@ -117,6 +110,8 @@ class NeuroGym(object):
         user_individ = self._input_user_number(
             'Выберите модель от 1 до 3: ', 1, 3
         )
+        self._model.age_gen = user_ten * 10
+        self._model.number_model = user_individ
         selected_individ = self.best_individuals[user_ten-1][user_individ-1]
         self._model.set_weights_from_vector(selected_individ)
         self._model.save_modal()
@@ -124,30 +119,38 @@ class NeuroGym(object):
     
     def _save_statistics(self):
         """ Сохранение статистики. """
-        np.save(str(self._env_dir / 'Max'), np.array(self.max_values))
-        np.save(str(self._env_dir / 'Mean'), np.array(self.mean_values))
-        np.save(str(self._env_dir / 'Min'), np.array(self.min_values))
-        np.save(str(self._env_dir / 'Std'), np.array(self.std_values))
-        np.save(str(self._env_dir / 'BestEvalVals'), np.array(self.best_values))
-        np.save(str(self._env_dir / 'BestEvalIndivids'), np.array(self.best_individuals))
+        valid_years = len(self.max_values) <= NUMBER_YEARS_ON_GRAPHIC
+        np.savez(self._env.statistic_folder / 'evolution',
+            max_values = self.max_values if valid_years else self.max_values[NUMBER_YEARS_ON_GRAPHIC:],
+            mean_values = self.mean_values if valid_years else self.mean_values[NUMBER_YEARS_ON_GRAPHIC:],
+            min_values = self.min_values if valid_years else self.min_values[NUMBER_YEARS_ON_GRAPHIC:],
+            std_values = self.std_values if valid_years else self.std_values[NUMBER_YEARS_ON_GRAPHIC:],
+            best_values = self.best_values if valid_years else self.best_values[NUMBER_YEARS_ON_GRAPHIC/10:],
+            best_individuals = self.best_individuals if valid_years else self.best_individuals[NUMBER_YEARS_ON_GRAPHIC/10:],
+            age_population = self.age_population
+        )
     
     def _load_statistics(self):
         """ Загрузка статистики. """
-        try:
-            self.max_values = np.load(str(self._env_dir / 'Max.npy')).tolist()
-            self.mean_values = np.load(str(self._env_dir / 'Mean.npy')).tolist()
-            self.min_values = np.load(str(self._env_dir / 'Min.npy')).tolist()
-            self.std_values = np.load(str(self._env_dir / 'Std.npy')).tolist()
-            self.best_values = np.load(str(self._env_dir / 'BestEvalVals.npy')).tolist()
-            self.best_individuals: List[List[list]] = np.load(str(self._env_dir / 'BestEvalIndivids.npy')).tolist()
-        except Exception:
-            pass
+        if not self._env.statistic_folder:
+            return None
+        if not (self._env.statistic_folder / 'evolution.npz').exists():
+            return None
+        with np.load(self._env.statistic_folder / 'evolution.npz', allow_pickle=True) as loader:
+            self.max_values = loader['max_values'].tolist()
+            self.mean_values = loader['mean_values'].tolist()
+            self.min_values = loader['min_values'].tolist()
+            self.std_values = loader['std_values'].tolist()
+            self.best_values = loader['best_values'].tolist()
+            self.best_individuals = loader['best_individuals'].tolist()
+            self.age_population = int(loader['age_population'])
     
     def _plot_evolution(self):
         """ Визуализация результата. """
         plt.figure(figsize=(12, 5))
         axes = plt.subplot(2, 1, 1)
-        generations = range(len(self.max_values))
+        start = int(self.age_population - len(self.max_values))
+        generations = range(start, len(self.max_values))
         plt.plot(generations, self.max_values, 'b-', label='Максимальное', linewidth=2, alpha=0.8)
         plt.plot(generations, self.mean_values, 'g-', label='Среднее', linewidth=2, alpha=0.8)
         plt.plot(generations, self.min_values, 'r-', label='Минимальное', linewidth=2, alpha=0.8)
@@ -173,7 +176,8 @@ class NeuroGym(object):
         x = np.arange(len(best1))
         width = 0.3
         ax.set_xticks(x)
-        ax.set_xticklabels([str(i) for i in range(1, len(best1)+1)])
+        start = int((self.age_population - len(self.max_values)) / 10)
+        ax.set_xticklabels([str(i) for i in range(start + 1, len(best1)+1)])
         ax.bar(x - width, best1, width=width, label='Лучший 1', alpha=0.8)
         ax.bar(x, best2, width=width, label='Лучший 2', alpha=0.8)
         ax.bar(x + width, best3, width=width, label='Лучший 3', alpha=0.8)
@@ -200,11 +204,11 @@ class NeuroGym(object):
             observation, reward, terminated, truncated, _ = env_gym.step(action)
             time.sleep(.03)
             total_reward += reward
-            if not self._env.neuro_config.calc_confidence:
+            if not self._env.calc_confidence:
                 continue
             steps_confidence += confidence
             steps += 1
-        if self._env.neuro_config.calc_confidence and (total_reward > 0):
+        if self._env.calc_confidence and (total_reward > 0):
             step_confidence = steps_confidence / steps if steps else 0
             print(f"Средняя уверенность шага: {step_confidence:.1%}")
         print(f"Общая награда: {total_reward:.1f}")
@@ -222,17 +226,17 @@ class NeuroGym(object):
         progress = "[" + " " * LEN_BAR + "]"
         print(f"\r{progress} 0%", end="", flush=True)
         for i in range(1, num_ten + 1):
-            env_gym = gym.make(**self._env.params)
-            gen_alg = AlgorithmEvaluate(self._model, env_gym, self._env)
-            gen_alg.load_best_population()
-            gen_alg.evaluate()
-            gen_alg.save_best_individuals()
-            for i in gen_alg.best_individuals():
-                self._model.set_weights_from_vector(i)
-                break
-            self._model.save_modal()
-            env_gym.close()
-            
+            with self._env as env_gym:
+                gen_alg = GeneticEvolution(self._model, env_gym, self._env)
+                gen_alg.create_new_population()
+                gen_alg.load_best_population()
+                gen_alg.evaluate()
+                gen_alg.save_best_individuals()
+                for i in gen_alg.best_individuals():
+                    self._model.set_weights_from_vector(i)
+                    break
+                self._model.save_modal()
+            self.age_population += len(gen_alg.max_values)
             self.max_values.extend(gen_alg.max_values.copy())
             self.mean_values.extend(gen_alg.mean_values.copy())
             self.min_values.extend(gen_alg.min_values.copy())

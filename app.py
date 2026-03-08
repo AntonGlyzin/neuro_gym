@@ -1,5 +1,5 @@
+import environs # Добавление в текущее пространиство окружающих сред.
 from neuro_gym import NeuroGym
-
 
 if __name__ == '__main__':
     neuro_gym = NeuroGym()

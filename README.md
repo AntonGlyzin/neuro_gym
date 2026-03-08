@@ -2,54 +2,66 @@
 
 Библиотека объединяет в себе нейронный и генетический алгоритм для обучения взаимодействия агента с окружающей средой из библиотеки `gymnasium.farama.org`.
 
-Для настройки и добавления окружающей среды в программу предназначен файл `settings.py`.
+Для настройки и добавления окружающей среды в программу нужно в папке `neuro_gym/environs` создать свой класс унаследованный от `from neuro_gym.environ import Environ`.
 
-Пример определений окружения:
+Пример для лунного посадочного модуля:
 
 ```python
 
-from pathlib import Path
-from neuro_gym.environs import Environs, Complexity, torch, NeuroConfig
+from typing import Dict, Union
+import torch
+import numpy as np
+from neuro_gym.environ import Environ, Complexity
 
-ROOT_DIR = Path(__file__).parent
 
-Environs(
-    id='LunarLander-v3',
-    name='Лунный посадочный модуль',
-    params={
-        'id': 'LunarLander-v3',
-        'continuous': False, 
-        'gravity': -10.0, # 0 до -12.0
-        'enable_wind': True,  # случайным образом в диапазоне от -9999 до 9999
-        'wind_power': 20.0,  #  от 0 до 20.0
-        'turbulence_power': 2.0 #  от 0 до 2.0
-    },
-    neuro_config=NeuroConfig(
-        input_size=8, 
-        output_size=4, 
-        complexity=Complexity.LOW,
-        calc_confidence=True,
-        update_vector=lambda y: torch.argmax(y, dim=-1).item()
-    )
-)
-...
+class LunarLander(Environ):
+    
+    @property
+    def id(self) -> str:
+        return 'LunarLander-v3'
+    
+    @property
+    def name(self) -> str:
+        return 'Лунный посадочный модуль'
+    
+    @property
+    def params(self) -> Dict:
+        return {
+            'id': self.id,
+            'continuous': False, 
+            'gravity': -10.0, # 0 до -12.0
+            'enable_wind': True,  # случайным образом в диапазоне от -9999 до 9999
+            'wind_power': 20.0,  #  от 0 до 20.0
+            'turbulence_power': 2.0 #  от 0 до 2.0
+        }
+    
+    @property
+    def complexity(self) -> int:
+        return Complexity.LOW
+    
+    @property
+    def number_input_neurons(self) -> int: 
+        return 8
+    
+    @property
+    def number_output_neurons(self) -> int: 
+        return 4
+    
+    @property
+    def calc_confidence(self) -> bool: 
+        return True
+    
+    def update_vector(self, output_vector: Union[np.ndarray, torch.Tensor]) -> int:
+        return torch.argmax(output_vector, dim=-1).item()
 ```
 
-Количество нейронов регулируется с помощью объекта `Complexity`. Он выставляет сложность корректирую количество скрытых нейронов.
-
-В каждом окружение есть определенные параметры, которые можно передать при отображение сцены или для обучения в этих условиях.
-
-Размер входного и выходного вектора зависит от окружения. Размер вектора и передаваемые параметры можно посмотреть в `gymnasium.farama.org`.
-
-Параметр `update_vector` предназначен для корректировки данных для метода `action` после получения вектора из нейронной сети.
-
-Этот параметр `calc_confidence` может быть использован для обучения уверенности нейронной сети к действию. Если одно из значений в выходящем векторе нейронной сети будет сильно отличаться от других, то эта сеть уверенна в своем действие. Такая особь при обучение получает дополнительное вознаграждения, если три попытки игры нейронной сети закончились с положительным результатом. 
+И добавить импорт к файлу в `neuro_gym/environs/__init__.py`.
 
 Запуск программы производится через `start.bat` файл. Этот скрипт автоматически создаст виртуальное окружение и запустить программу.
 
 ![Список действия](img/list_action.png)
 
-После запуска будут доступны окружающие среди из настроек и действия применимые на них.
+После запуска программы выведится список сцен.
 
 Для обучения моделей есть режим нейроэволюции. Он предназначен для улучшения показателей взаимодействия со сценой.
 
